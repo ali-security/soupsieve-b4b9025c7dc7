@@ -1,4 +1,7 @@
 """Test utilities."""
+import os
+import subprocess
+import sys
 import unittest
 import bs4
 import textwrap
@@ -23,6 +26,20 @@ XHTML = 0x4
 XML = 0x8
 PYHTML = 0x10
 LXML_HTML = 0x20
+
+# Seconds a malformed selector may take to fail compiling in a child process (includes interpreter start up).
+COMPILE_TIMEOUT = 10
+
+# Compile the selector read from `stdin`, exit with 0 only if it fails with a syntax error.
+COMPILE_SCRIPT = """\
+import sys
+import soupsieve as sv
+try:
+    sv.compile(sys.stdin.read())
+except sv.SelectorSyntaxError:
+    sys.exit(0)
+sys.exit(1)
+"""
 
 
 def skip_no_lxml(func):
@@ -102,6 +119,30 @@ class TestCase(unittest.TestCase):
         print('----Running Assert Test----')
         with self.assertRaises(exception):
             self.compile_pattern(pattern, namespaces=namespace, custom=custom)
+
+    def assert_raises_no_timeout(self, pattern, timeout=COMPILE_TIMEOUT):
+        """
+        Assert pattern fails for syntax error, not timeout error.
+
+        The pattern is compiled in a separate process so that a pattern stuck in
+        catastrophic backtracking can be terminated on every platform
+        (`signal.SIGALRM` is not available on Windows).
+        """
+
+        print('----Running Assert No Timeout Test----')
+        try:
+            result = subprocess.run(
+                [sys.executable, '-c', COMPILE_SCRIPT],
+                input=pattern,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                universal_newlines=True,
+                cwd=os.path.dirname(os.path.dirname(os.path.abspath(sv.__file__))),
+                timeout=timeout
+            )
+        except subprocess.TimeoutExpired:
+            self.fail('Compiling {!r} timed out after {} seconds'.format(pattern, timeout))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def assert_selector(self, markup, selectors, expected_ids, namespaces={}, custom=None, flags=0):
         """Assert selector."""

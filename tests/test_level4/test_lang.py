@@ -133,6 +133,12 @@ class TestLang(util.TestCase):
             flags=util.HTML
         )
 
+    def test_language_unclosed_quote(self):
+        """Test language with unclosed quote fails for syntax error, not timeout error."""
+
+        self.assert_raises_no_timeout('p:lang("' + ('x' * 300))
+        self.assert_raises_no_timeout("p:lang('" + ('x' * 300))
+
     def test_wildcard_at_start_quoted(self):
         """Test language with wildcard at start (quoted)."""
 
